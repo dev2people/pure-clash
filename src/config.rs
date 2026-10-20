@@ -65,6 +65,26 @@ impl Theme {
     }
 }
 
+/// 用户自定义的入站监听项。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct CustomListener {
+    /// 唯一标识，避免编辑时按索引漂移。
+    pub(crate) id: String,
+    /// 监听名称（如 `http-in`, `socks-in`）。
+    pub(crate) name: String,
+    /// 监听类型：`mixed`、`http`、`socks`。
+    #[serde(rename = "type")]
+    pub(crate) listener_type: String,
+    /// 监听端口（1024~65535）。
+    pub(crate) port: u16,
+    /// 规则路由模式：如 `rule`、`global`、`direct`；None 则使用全局模式。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) rule: Option<String>,
+    /// 指定出口代理或策略组（如 `DIRECT`、`GLOBAL`）；可选。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) proxy: Option<String>,
+}
+
 /// 订阅/导入配置的元数据；YAML 内容按 id 存放在 config/profiles/ 目录。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct ProfileMeta {
@@ -105,6 +125,9 @@ pub(crate) struct AppConfig {
     /// 强制为每条连接匹配发起进程（注入 `find-process-mode: always`）；
     /// 关闭时不注入，使用内核默认行为。开关以此文件为唯一事实来源。
     pub(crate) find_process_always: bool,
+    /// 自定义入站监听列表；支持为各端口单独设置协议类型与规则模式。
+    #[serde(default)]
+    pub(crate) listeners: Vec<CustomListener>,
     /// 订阅与导入的配置列表，按用户拖动后的展示顺序保存；新配置追加到末尾。
     pub(crate) profiles: Vec<ProfileMeta>,
     /// 当前激活的配置 id；None 表示使用内置默认配置。
@@ -122,6 +145,7 @@ impl Default for AppConfig {
             theme: Theme::default(),
             language: Language::default(),
             find_process_always: false,
+            listeners: Vec::new(),
             profiles: Vec::new(),
             active_profile: None,
             selected_nodes: Default::default(),
