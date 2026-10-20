@@ -78,7 +78,7 @@ pub(crate) use windows::{SingleInstance, SingleInstanceState};
 #[cfg(target_os = "linux")]
 pub(crate) use linux::{
     ElevatedProcess, capture_system_proxy, launch_elevated, restore_system_proxy,
-    run_elevated_helper_if_requested, set_system_proxy, set_system_proxy_endpoints,
+    run_elevated_helper_if_requested, set_system_proxy_endpoints,
 };
 #[cfg(target_os = "windows")]
 pub(crate) use windows::{

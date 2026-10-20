@@ -171,6 +171,7 @@ pub(crate) fn set_system_proxy_endpoints(
 }
 
 /// 兼容旧接口：将全部协议指向同一个 server。
+#[allow(dead_code)]
 pub(crate) fn set_system_proxy(server: &str) -> Result<()> {
     set_system_proxy_endpoints(server, None)
 }
@@ -305,7 +306,11 @@ fn kde_notify_kio_reload() {
     // 优先通过 D-Bus 通知 kded 重载 proxyscout / reconfigure
     for service in ["org.kde.kded6", "org.kde.kded5"] {
         let _ = Command::new("qdbus")
-            .args([service, "/modules/proxyscout", "org.kde.KPAC.ProxyScout.reset"])
+            .args([
+                service,
+                "/modules/proxyscout",
+                "org.kde.KPAC.ProxyScout.reset",
+            ])
             .output();
         let _ = Command::new("qdbus")
             .args([service, "/kded", "reconfigure"])
