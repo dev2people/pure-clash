@@ -1092,6 +1092,7 @@ impl PureClash {
     fn spawn_readiness_probe(&mut self, generation: u64, cx: &mut Context<Self>) {
         let Some(controller) = self.controller() else {
             self.core_state = CoreState::Running;
+            self.restore_system_proxy_if_configured();
             return;
         };
         cx.spawn(async move |this, cx| {
@@ -1120,6 +1121,7 @@ impl PureClash {
                         this.mihomo_error = None;
                         this.fetch_runtime_state(cx);
                         this.verify_tun_effective(generation, cx);
+                        this.restore_system_proxy_if_configured();
                     }
                     Err(error) => {
                         // 内核未能就绪：先恢复代理设置再回收进程，避免流量断在死端口上。
@@ -1589,6 +1591,31 @@ impl PureClash {
         (http, socks)
     }
 
+    /// 内核就绪后按配置恢复系统代理设置（如上次退出前用户开启了系统代理）。
+    fn restore_system_proxy_if_configured(&mut self) {
+        if self.config.system_proxy && !self.system_proxy {
+            log_info!("proxy", "检测到配置中开启了系统代理，内核就绪后自动应用");
+            if let Err(error) = self.enable_system_proxy_endpoints() {
+                log_error!("proxy", "启动时自动开启系统代理失败：{error:#}");
+                self.integration_error = Some(system_proxy_error(&error));
+            }
+        }
+    }
+
+    /// 启用系统代理并保存托管前的系统设置快照。
+    fn enable_system_proxy_endpoints(&mut self) -> anyhow::Result<()> {
+        let (http_addr, socks_addr) = self.current_proxy_endpoints();
+        log_info!(
+            "proxy",
+            "开启系统代理（HTTP: {http_addr}, SOCKS: {:?}）",
+            socks_addr
+        );
+        enable_system_proxy(&self.paths, &http_addr, socks_addr.as_deref())?;
+        self.integration_error = None;
+        self.system_proxy = true;
+        Ok(())
+    }
+
     /// 开关系统代理：启用要求内核运行中；关闭恢复托管前的用户设置。
     fn toggle_system_proxy(&mut self, cx: &mut Context<Self>) {
         if !self.system_proxy {
@@ -1597,16 +1624,12 @@ impl PureClash {
                 cx.notify();
                 return;
             }
-            let (http_addr, socks_addr) = self.current_proxy_endpoints();
-            log_info!(
-                "proxy",
-                "开启系统代理（HTTP: {http_addr}, SOCKS: {:?}）",
-                socks_addr
-            );
-            match enable_system_proxy(&self.paths, &http_addr, socks_addr.as_deref()) {
+            match self.enable_system_proxy_endpoints() {
                 Ok(()) => {
-                    self.integration_error = None;
-                    self.system_proxy = true;
+                    self.config.system_proxy = true;
+                    if let Err(error) = self.config.save(&self.paths.config_file) {
+                        log_error!("config", "保存系统代理配置失败：{error:#}");
+                    }
                 }
                 Err(error) => {
                     log_error!("proxy", "开启系统代理失败：{error:#}");
@@ -1615,6 +1638,10 @@ impl PureClash {
             }
         } else {
             self.disable_system_proxy();
+            self.config.system_proxy = false;
+            if let Err(error) = self.config.save(&self.paths.config_file) {
+                log_error!("config", "保存系统代理配置失败：{error:#}");
+            }
         }
         cx.notify();
     }
@@ -3069,21 +3096,23 @@ impl PureClash {
 impl Render for PureClash {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = self.palette();
-        let content = div()
-            .size_full()
-            .flex()
-            .flex_col()
-            .overflow_hidden()
-            .text_color(palette.text)
-            .child(render_titlebar(self, palette, window, cx))
-            .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .flex()
-                    .child(render_sidebar(self, palette, window, cx))
-                    .child(render_page(self, palette, window, cx)),
-            );
+        let content = crate::platform::apply_ui_font(
+            div()
+                .size_full()
+                .flex()
+                .flex_col()
+                .overflow_hidden()
+                .text_color(palette.text)
+                .child(render_titlebar(self, palette, window, cx))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_h_0()
+                        .flex()
+                        .child(render_sidebar(self, palette, window, cx))
+                        .child(render_page(self, palette, window, cx)),
+                ),
+        );
 
         #[cfg(target_os = "linux")]
         return linux_client_side_decorations(content, palette, window);

@@ -125,6 +125,9 @@ pub(crate) struct AppConfig {
     /// 强制为每条连接匹配发起进程（注入 `find-process-mode: always`）；
     /// 关闭时不注入，使用内核默认行为。开关以此文件为唯一事实来源。
     pub(crate) find_process_always: bool,
+    /// 是否在启动与内核就绪后自动开启系统代理；随用户在界面手动开启/关闭而持久化。
+    #[serde(default)]
+    pub(crate) system_proxy: bool,
     /// 自定义入站监听列表；支持为各端口单独设置协议类型与规则模式。
     #[serde(default)]
     pub(crate) listeners: Vec<CustomListener>,
@@ -145,6 +148,7 @@ impl Default for AppConfig {
             theme: Theme::default(),
             language: Language::default(),
             find_process_always: false,
+            system_proxy: false,
             listeners: Vec::new(),
             profiles: Vec::new(),
             active_profile: None,
@@ -366,6 +370,23 @@ mod tests {
         assert_eq!(reloaded.config.mihomo_version, "test-version");
 
         fs::remove_dir_all(root).expect("应清理测试目录");
+    }
+
+    #[test]
+    fn system_proxy_state_survives_config_save_and_legacy_defaults() {
+        let empty_config: AppConfig = serde_json::from_str("{}").unwrap();
+        assert!(!empty_config.system_proxy);
+        assert!(!AppConfig::default().system_proxy);
+
+        let mut config = AppConfig::default();
+        config.system_proxy = true;
+        let root = test_dir("system-proxy-config");
+        fs::create_dir_all(&root).unwrap();
+        let file = root.join("app.json");
+        config.save(&file).unwrap();
+        let restored: AppConfig = serde_json::from_str(&fs::read_to_string(file).unwrap()).unwrap();
+        assert!(restored.system_proxy);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

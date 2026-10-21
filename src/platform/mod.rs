@@ -65,9 +65,17 @@ pub(crate) fn set_autostart(_enabled: bool) -> anyhow::Result<()> {
 pub(crate) use tray::{SystemTray, TrayAction};
 
 #[cfg(target_os = "linux")]
-pub(crate) use linux::show_main_window;
+pub(crate) use linux::{apply_ui_font, configure_fonts, show_main_window};
 #[cfg(target_os = "windows")]
 pub(crate) use windows::show_main_window;
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn configure_fonts(_cx: &mut gpui::App) {}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn apply_ui_font<T: gpui::Styled>(element: T) -> T {
+    element
+}
 
 #[cfg(target_os = "linux")]
 pub(crate) use linux::{SingleInstance, SingleInstanceState};
